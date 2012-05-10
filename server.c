@@ -41,7 +41,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <err.h>
-#include <sys/queue.h>
 #include <sys/stat.h>
 
 /* Libevent. */
@@ -54,30 +53,9 @@
 /* LevelDB */
 #include <leveldb/c.h>
 
-#define SERVER_PORT 8080
-#define MAX_BUF 16384
-
-/**
- * A struct for client specific data, also includes pointer to create
- * a list of clients.
- */
-struct client {
-	/* The clients socket. */
-	int fd;
-
-	/* The bufferedevent for this client. */
-	struct bufferevent *buf_ev;
-
-	TAILQ_ENTRY(client) entries;
-};
-TAILQ_HEAD(, client) clients;
-
-struct queue {
-	char *queuename;
-	TAILQ_HEAD(, client) subscribers;
-	TAILQ_ENTRY(queue) entries;
-};
-TAILQ_HEAD(, queue) queues;
+#include "common.h"
+#include "server.h"
+#include "client.h"
 
 struct event_base *base;
 
@@ -119,64 +97,6 @@ int setnonblock(int fd)
 	return 0;
 }
 
-int find_readers(char *queuename, struct evbuffer *evb)
-{
-	struct queue *entry, *tmp_entry;
-	char buf[MAX_BUF];
-
-	*buf = '\0';
-	for (entry = TAILQ_FIRST(&queues); entry != NULL; entry = tmp_entry) {
-		tmp_entry = TAILQ_NEXT(entry, entries);
-		if (strncmp(queuename, entry->queuename, strlen(entry->queuename)) == 0){
-			evbuffer_add_printf(evb, "queue: %s", queuename);
-			//TAILQ_REMOVE(&readers, entry, entries);
-			return 1;
-		}
-	}
-	return 0;
-}
-
-int stomp_parse_headers(struct evkeyvalq* headers, struct evbuffer* buffer)
-{
-	char *line;
-	size_t line_length;
-	char *skey, *svalue;
-
-	TAILQ_INIT(headers);
-
-	while ((line = evbuffer_readln(buffer, &line_length, EVBUFFER_EOL_CRLF)) != NULL) {
-		skey = NULL;
-		svalue = NULL;
-
-		if (*line == '\0') {
-			free(line);
-			return 0;
-		}
-
-		/* Processing of header lines */
-		svalue = line;
-		skey = strsep(&svalue, ":");
-		if (svalue == NULL){
-			free(line);
-			return 1;
-		}
-
-		svalue += strspn(svalue, " ");
-
-		printf("HEADER: <%s> <%s>\n", skey, svalue);
-
-		if (evhttp_add_header(headers, skey, svalue) == -1){
-			free(line);
-			return 2;
-		}
-
-		free(line);
-	}
-
-	return 0;
-}
-
-
 /**
  * Called by libevent when there is data to read.
  */
@@ -185,80 +105,45 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	/* Write back the read buffer. It is important to note that
 	 * bufferevent_write_buffer will drain the incoming data so it
 	 * is effectively gone after we call it. */
-	struct client *cli = (struct client *)arg;
-	struct queue *entry, *tmp_entry;
-	struct evbuffer *evb, *evb2;
-	char *request, *header_begin;
-	struct evkeyvalq *headers;
-	const char *queuename;
+	struct client *client = (struct client *)arg;
+	struct evbuffer *evb;
+	char *header_begin;
 	
-	request = evbuffer_readln(bufferevent_get_input(bev), NULL, EVBUFFER_EOL_NUL);
-	if (request == NULL) {
+	client->request = evbuffer_readln(bufferevent_get_input(bev), NULL, EVBUFFER_EOL_NUL);
+	if (client->request == NULL) {
 		return;
 	}
-	
-	header_begin = strstr(request, "\r\n");
+
+	header_begin = strstr(client->request, "\r\n");
 	if(header_begin == NULL){
-		free(request);
+		free(client->request);
 		return;
 	}
 
+	client->buf_out = evbuffer_new();
 	evb = evbuffer_new();
-	evb2 = evbuffer_new();
 
-	evbuffer_prepend(evb2, header_begin+2, strlen(header_begin+2));
+	evbuffer_prepend(evb, header_begin+2, strlen(header_begin+2));
 
-	headers = calloc(1, sizeof(struct evkeyvalq));
-	if(headers == NULL){
-		goto error;
+	if(stomp_parse_headers(client->headers, evb) != 0){
+		evbuffer_add_printf(client->buf_out, "Invalid Request\n");
 	}
-
-	if(stomp_parse_headers(headers, evb2) != 0){
-		evbuffer_add_printf(evb, "Invalid Request\n");
-	}
-	else if (strncmp(request, "SUBSCRIBE", 9) == 0) {
-		queuename = evhttp_find_header(headers, "destination");
-		if(queuename == NULL){
-			evbuffer_add_printf(evb, "Destination header missing\n");
-			goto error;
-		}
-
-		for (entry = TAILQ_FIRST(&queues); entry != NULL; entry = tmp_entry) {
-			tmp_entry = TAILQ_NEXT(entry, entries);
-			if (strcmp(entry->queuename, queuename) == 0){
-				evbuffer_add_printf(evb, "queue %s found\n", queuename);
-				entry = tmp_entry;
-				break;
-			}
-		}
-
-		if (entry == NULL){
-			entry = malloc(sizeof(*entry));
-			entry->queuename = malloc(strlen(queuename)+1);
-			strcpy(entry->queuename, queuename);
-			TAILQ_INIT(&entry->subscribers);
-			TAILQ_INSERT_TAIL(&queues, entry, entries);
-			evbuffer_add_printf(evb, "queue %s created\n", queuename);
-		}
-
-		/* TODO: check if already subscribed */
-
-		TAILQ_INSERT_TAIL(&entry->subscribers, cli, entries);
-	}
-	else if (strncmp(request, "exit", 4) == 0 || strncmp(request, "quit", 4) == 0) {
-		evbuffer_add_printf(evb, "ok bye\n");
-		shutdown(cli->fd, SHUT_RDWR);
+	else if (strncmp(client->request, "SUBSCRIBE", 9) == 0) {
+		/* TODO: improve interface API for handlers */
+        }
+	else if (strncmp(client->request, "exit", 4) == 0 || strncmp(client->request, "quit", 4) == 0) {
+		evbuffer_add_printf(client->buf_out, "ok bye\n");
+		shutdown(client->fd, SHUT_RDWR);
 	}
 	else {
-		evbuffer_add_printf(evb, "error unknown command\n");
+		evbuffer_add_printf(client->buf_out, "error unknown command\n");
 	}
 
-error:
-	bufferevent_write_buffer(bev, evb);
-	evbuffer_free(evb2);
+	bufferevent_write_buffer(bev, client->buf_out);
 	evbuffer_free(evb);
-	free(request);
-	free(headers);
+	evbuffer_free(client->buf_out);
+	free(client->request);
+	free(client->headers);
 }
 
 /**
@@ -297,7 +182,7 @@ void buffered_on_error(struct bufferevent *bev, short what, void *arg)
 
 	/* TODO: remove from subscribers */
 
-	bufferevent_free(client->buf_ev);
+	bufferevent_free(client->buf_in);
 	close(client->fd);
 	free(client);
 }
@@ -328,42 +213,13 @@ void on_accept(int fd, short ev, void *arg)
 	if (client == NULL)
 		err(1, "malloc failed");
 	client->fd = client_fd;
-	
-	/* Create the buffered event.
-	 *
-	 * The first argument is the file descriptor that will trigger
-	 * the events, in this case the clients socket.
-	 *
-	 * The second argument is the callback that will be called
-	 * when data has been read from the socket and is available to
-	 * the application.
-	 *
-	 * The third argument is a callback to a function that will be
-	 * called when the write buffer has reached a low watermark.
-	 * That usually means that when the write buffer is 0 length,
-	 * this callback will be called.  It must be defined, but you
-	 * don't actually have to do anything in this callback.
-	 *
-	 * The fourth argument is a callback that will be called when
-	 * there is a socket error.  This is where you will detect
-	 * that the client disconnected or other socket errors.
-	 *
-	 * The fifth and final argument is to store an argument in
-	 * that will be passed to the callbacks.  We store the client
-	 * object here.
-	 */
-	/*
-	client->buf_ev = bufferevent_new(client_fd, buffered_on_read,
-	    buffered_on_write, buffered_on_error, client);
-	*/
-
-	client->buf_ev = bufferevent_socket_new(base, client_fd, 0); 
-	bufferevent_setcb(client->buf_ev, buffered_on_read, buffered_on_write,
+	client->buf_in = bufferevent_socket_new(base, client_fd, 0); 
+	bufferevent_setcb(client->buf_in, buffered_on_read, buffered_on_write,
 		buffered_on_error, client);
 
 	/* We have to enable it before our callbacks will be
 	 * called. */
-	bufferevent_enable(client->buf_ev, EV_READ);
+	bufferevent_enable(client->buf_in, EV_READ);
 }
 
 int main(int argc, char **argv)

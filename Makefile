@@ -7,7 +7,7 @@ LOCALBASE?=/usr/local
 CPPFLAGS=-I${LOCALBASE}/include -g -Wall
 LDFLAGS=-L${LOCALBASE}/lib -L${LOCALBASE}/lib/event2
 
-SRC =	server.c
+SRC =	server.c common.c stomp.c
 OBJS =	${SRC:.c=.o}
 
 all:	redqueue
