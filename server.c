@@ -48,6 +48,8 @@
 #include <event2/event.h>
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
+#include <event2/http.h>
+#include <event2/keyvalq_struct.h>
 
 /* LevelDB */
 #include <leveldb/c.h>
@@ -134,6 +136,47 @@ int find_readers(char *queuename, struct evbuffer *evb)
 	return 0;
 }
 
+int stomp_parse_headers(struct evkeyvalq* headers, struct evbuffer* buffer)
+{
+	char *line;
+	size_t line_length;
+	char *skey, *svalue;
+
+	TAILQ_INIT(headers);
+
+	while ((line = evbuffer_readln(buffer, &line_length, EVBUFFER_EOL_CRLF)) != NULL) {
+		skey = NULL;
+		svalue = NULL;
+
+		if (*line == '\0') {
+			free(line);
+			return 0;
+		}
+
+		/* Processing of header lines */
+		svalue = line;
+		skey = strsep(&svalue, ":");
+		if (svalue == NULL){
+			free(line);
+			return 1;
+		}
+
+		svalue += strspn(svalue, " ");
+
+		printf("HEADER: <%s> <%s>\n", skey, svalue);
+
+		if (evhttp_add_header(headers, skey, svalue) == -1){
+			free(line);
+			return 2;
+		}
+
+		free(line);
+	}
+
+	return 0;
+}
+
+
 /**
  * Called by libevent when there is data to read.
  */
@@ -144,17 +187,42 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	 * is effectively gone after we call it. */
 	struct client *cli = (struct client *)arg;
 	struct queue *entry, *tmp_entry;
-	struct evbuffer *evb;
-	char *request;
-	char *queuename = "/topic/test";
+	struct evbuffer *evb, *evb2;
+	char *request, *header_begin;
+	struct evkeyvalq *headers;
+	const char *queuename;
 	
 	request = evbuffer_readln(bufferevent_get_input(bev), NULL, EVBUFFER_EOL_NUL);
 	if (request == NULL) {
 		return;
 	}
 	
+	header_begin = strstr(request, "\r\n");
+	if(header_begin == NULL){
+		free(request);
+		return;
+	}
+
 	evb = evbuffer_new();
-	if (strncmp(request, "SUBSCRIBE", 9) == 0) {
+	evb2 = evbuffer_new();
+
+	evbuffer_prepend(evb2, header_begin+2, strlen(header_begin+2));
+
+	headers = calloc(1, sizeof(struct evkeyvalq));
+	if(headers == NULL){
+		goto error;
+	}
+
+	if(stomp_parse_headers(headers, evb2) != 0){
+		evbuffer_add_printf(evb, "Invalid Request\n");
+	}
+	else if (strncmp(request, "SUBSCRIBE", 9) == 0) {
+		queuename = evhttp_find_header(headers, "destination");
+		if(queuename == NULL){
+			evbuffer_add_printf(evb, "Destination header missing\n");
+			goto error;
+		}
+
 		for (entry = TAILQ_FIRST(&queues); entry != NULL; entry = tmp_entry) {
 			tmp_entry = TAILQ_NEXT(entry, entries);
 			if (strcmp(entry->queuename, queuename) == 0){
@@ -184,10 +252,13 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	else {
 		evbuffer_add_printf(evb, "error unknown command\n");
 	}
-	
+
+error:
 	bufferevent_write_buffer(bev, evb);
+	evbuffer_free(evb2);
 	evbuffer_free(evb);
 	free(request);
+	free(headers);
 }
 
 /**
