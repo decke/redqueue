@@ -37,6 +37,9 @@ struct client {
    /* The clients socket. */
    int fd;
 
+   /* Authentication flag for this connection. */
+   int authenticated;
+
    /* The bufferedevent for this client. */
    struct bufferevent *buf_in;
 

@@ -30,7 +30,10 @@
 #include <event2/buffer.h>
 #include <event2/http.h>
 
+extern int stomp_connect(struct client *client);
+extern int stomp_disconnect(struct client *client);
 extern int stomp_subscribe(struct client *client);
+
 extern int stomp_parse_headers(struct evkeyvalq *headers, char *request);
 
  

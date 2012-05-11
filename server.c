@@ -122,18 +122,22 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 		evbuffer_add_printf(client->buf_out, "Invalid Request\n");
 		goto error;
 	}
-	else if (strncmp(client->request, "SUBSCRIBE", 9) == 0){
-		stomp_subscribe(client);
-        }
-	else if (strncmp(client->request, "exit", 4) == 0 || strncmp(client->request, "quit", 4) == 0){
-		evbuffer_add_printf(client->buf_out, "ok bye\n");
-		shutdown(client->fd, SHUT_RDWR);
+
+	if(client->authenticated == 0){
+		if(strncmp(client->request, "CONNECT", 7) == 0)
+			stomp_connect(client);
+		else if(strncmp(client->request, "DISCONNECT", 11) == 0)
+			stomp_disconnect(client);
+		else
+			evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:unknown command\r\n");
 	}
 	else {
-		evbuffer_add_printf(client->buf_out, "error unknown command\n");
+		if(strncmp(client->request, "SUBSCRIBE", 7) == 0)
+			stomp_subscribe(client);
+		else
+			evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:unknown command\r\n");
 	}
-
-
+		
 error:
 	bufferevent_write_buffer(bev, client->buf_out);
 
@@ -213,7 +217,9 @@ void on_accept(int fd, short ev, void *arg)
 	client = calloc(1, sizeof(*client));
 	if (client == NULL)
 		err(1, "malloc failed");
+
 	client->fd = client_fd;
+	client->authenticated = 0;
 	client->buf_in = bufferevent_socket_new(base, client_fd, 0); 
 	bufferevent_setcb(client->buf_in, buffered_on_read, buffered_on_write,
 		buffered_on_error, client);

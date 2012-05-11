@@ -33,5 +33,8 @@
 #define PID_FILE "/var/run/redqd.pid"
 
 #define SERVER_PORT 8080
+
+#define AUTH_USER "test"
+#define AUTH_PASS "test"
  
 #endif /* _SERVER_H_ */

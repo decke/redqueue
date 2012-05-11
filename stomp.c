@@ -34,7 +34,45 @@
 #include <event2/http.h>
 #include <event2/keyvalq_struct.h>
 
+#include "server.h"
 #include "client.h"
+
+int stomp_connect(struct client *client)
+{
+   const char *login;
+   const char *passcode;
+
+   login = evhttp_find_header(client->headers, "login");
+   if(login == NULL){
+      evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage: Authentication failed\r\n");
+      return 1;
+   }
+
+   passcode = evhttp_find_header(client->headers, "passcode");
+   if(passcode == NULL){
+      evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage: Authentication failed\r\n");
+      return 1;
+   }
+
+   if(strcmp(login, AUTH_USER) != 0 || strcmp(passcode, AUTH_PASS) != 0){
+      evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage: Authentication failed\r\n");
+      return 1;
+   }
+
+   client->authenticated = 1;
+
+   evbuffer_add_printf(client->buf_out, "CONNECTED\r\nsession:%d\r\n", 0);
+
+   return 0;
+}
+
+int stomp_disconnect(struct client *client)
+{
+   client->authenticated = 0;
+   shutdown(client->fd, SHUT_RDWR);
+
+   return 0;
+}
 
 
 int stomp_subscribe(struct client *client)
