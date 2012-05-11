@@ -24,13 +24,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _COMMON_H_
-#define _COMMON_H_
+#ifndef _STOMP_H_
+#define _STOMP_H_
 
 #include <event2/buffer.h>
+#include <event2/http.h>
 
-#define MAX_BUF 16384
+extern int stomp_subscribe(struct client *client);
+extern int stomp_parse_headers(struct evkeyvalq* headers, struct evbuffer* buffer);
 
-extern int find_readers(char *queuename, struct evbuffer *evb);
  
-#endif /* _COMMON_H_ */
+#endif /* _STOMP_H_ */
