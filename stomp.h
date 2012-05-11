@@ -31,7 +31,7 @@
 #include <event2/http.h>
 
 extern int stomp_subscribe(struct client *client);
-extern int stomp_parse_headers(struct evkeyvalq* headers, struct evbuffer* buffer);
+extern int stomp_parse_headers(struct evkeyvalq *headers, char *request);
 
  
 #endif /* _STOMP_H_ */

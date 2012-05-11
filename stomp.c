@@ -25,6 +25,7 @@
  */
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/queue.h>
 
@@ -73,16 +74,16 @@ int stomp_subscribe(struct client *client)
 }
 
 
-int stomp_parse_headers(struct evkeyvalq* headers, struct evbuffer* buffer)
+int stomp_parse_headers(struct evkeyvalq *headers, char *request)
 {
    char *line;
    size_t line_length;
    char *skey, *svalue;
+   struct evbuffer *buffer;
 
-   headers = calloc(1, sizeof(struct evkeyvalq));
-   if(headers == NULL){
-      return 1;
-   }
+   buffer = evbuffer_new();
+
+   evbuffer_prepend(buffer, request, strlen(request));
 
    TAILQ_INIT(headers);
 
@@ -90,8 +91,11 @@ int stomp_parse_headers(struct evkeyvalq* headers, struct evbuffer* buffer)
       skey = NULL;
       svalue = NULL;
 
+      printf("HEADER: <%s>\n", line);
+
       if (*line == '\0') {
          free(line);
+         evbuffer_free(buffer);
          return 0;
       }
 
@@ -100,6 +104,7 @@ int stomp_parse_headers(struct evkeyvalq* headers, struct evbuffer* buffer)
       skey = strsep(&svalue, ":");
       if (svalue == NULL){
          free(line);
+         evbuffer_free(buffer);
          return 2;
       }
 
@@ -107,10 +112,12 @@ int stomp_parse_headers(struct evkeyvalq* headers, struct evbuffer* buffer)
 
       if (evhttp_add_header(headers, skey, svalue) == -1){
          free(line);
+         evbuffer_free(buffer);
          return 1;
       }
 
       free(line);
+      evbuffer_free(buffer);
    }
 
    return 0;

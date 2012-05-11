@@ -107,32 +107,25 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	 * bufferevent_write_buffer will drain the incoming data so it
 	 * is effectively gone after we call it. */
 	struct client *client = (struct client *)arg;
-	struct evbuffer *evb;
-	char *header_begin;
 	
 	client->request = evbuffer_readln(bufferevent_get_input(bev), NULL, EVBUFFER_EOL_NUL);
-	if (client->request == NULL) {
-		return;
-	}
+	if (client->request == NULL)
+		goto error;
 
-	header_begin = strstr(client->request, "\r\n");
-	if(header_begin == NULL){
-		free(client->request);
-		return;
-	}
+	client->headers = calloc(1, sizeof(struct evkeyvalq));
+	if(client->headers == NULL)
+		goto error;
 
 	client->buf_out = evbuffer_new();
-	evb = evbuffer_new();
 
-	evbuffer_prepend(evb, header_begin+2, strlen(header_begin+2));
-
-	if(stomp_parse_headers(client->headers, evb) != 0){
+	if(stomp_parse_headers(client->headers, client->request) != 0){
 		evbuffer_add_printf(client->buf_out, "Invalid Request\n");
+		goto error;
 	}
-	else if (strncmp(client->request, "SUBSCRIBE", 9) == 0) {
-		/* TODO: improve interface API for handlers */
+	else if (strncmp(client->request, "SUBSCRIBE", 9) == 0){
+		stomp_subscribe(client);
         }
-	else if (strncmp(client->request, "exit", 4) == 0 || strncmp(client->request, "quit", 4) == 0) {
+	else if (strncmp(client->request, "exit", 4) == 0 || strncmp(client->request, "quit", 4) == 0){
 		evbuffer_add_printf(client->buf_out, "ok bye\n");
 		shutdown(client->fd, SHUT_RDWR);
 	}
@@ -140,11 +133,18 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 		evbuffer_add_printf(client->buf_out, "error unknown command\n");
 	}
 
+
+error:
 	bufferevent_write_buffer(bev, client->buf_out);
-	evbuffer_free(evb);
-	evbuffer_free(client->buf_out);
-	free(client->request);
-	free(client->headers);
+
+	if(client->buf_out)
+		evbuffer_free(client->buf_out);
+
+	if(client->headers)
+		free(client->headers);
+
+	if(client->request)
+		free(client->request);
 }
 
 /**
