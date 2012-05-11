@@ -93,10 +93,15 @@ int stomp_parse_headers(struct evkeyvalq *headers, char *request)
 
       printf("HEADER: <%s>\n", line);
 
-      if (*line == '\0') {
+      if (*line == '\0' || strncmp(line, "\r\n", 2) == 0) {
          free(line);
          evbuffer_free(buffer);
          return 0;
+      }
+
+      if(strchr(line, ':') == NULL){
+         printf("IGNORING: <%s>\n", line);
+         continue;
       }
 
       /* Processing of header lines */
