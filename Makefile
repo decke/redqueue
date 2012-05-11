@@ -5,7 +5,7 @@
 LOCALBASE?=/usr/local
 
 CPPFLAGS=-I${LOCALBASE}/include -g -Wall
-LDFLAGS=-L${LOCALBASE}/lib -L${LOCALBASE}/lib/event2
+LDFLAGS=-L${LOCALBASE}/lib/event2 -L${LOCALBASE}/lib
 
 SRC =	server.c common.c stomp.c
 OBJS =	${SRC:.c=.o}
