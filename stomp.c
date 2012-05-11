@@ -121,21 +121,13 @@ int stomp_parse_headers(struct evkeyvalq *headers, char *request)
 
    buffer = evbuffer_new();
 
-   evbuffer_prepend(buffer, request, strlen(request));
+   evbuffer_add(buffer, request, strlen(request));
 
    TAILQ_INIT(headers);
 
    while ((line = evbuffer_readln(buffer, &line_length, EVBUFFER_EOL_CRLF)) != NULL) {
       skey = NULL;
       svalue = NULL;
-
-      printf("HEADER: <%s>\n", line);
-
-      if (*line == '\0' || strncmp(line, "\r\n", 2) == 0) {
-         free(line);
-         evbuffer_free(buffer);
-         return 0;
-      }
 
       if(strchr(line, ':') == NULL){
          printf("IGNORING: <%s>\n", line);
@@ -160,8 +152,9 @@ int stomp_parse_headers(struct evkeyvalq *headers, char *request)
       }
 
       free(line);
-      evbuffer_free(buffer);
    }
+
+   evbuffer_free(buffer);
 
    return 0;
 }

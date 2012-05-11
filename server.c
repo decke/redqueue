@@ -108,8 +108,8 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	 * is effectively gone after we call it. */
 	struct client *client = (struct client *)arg;
 	
-	client->request = evbuffer_readln(bufferevent_get_input(bev), NULL, EVBUFFER_EOL_NUL);
-	if (client->request == NULL)
+	client->rawrequest = evbuffer_readln(bufferevent_get_input(bev), NULL, EVBUFFER_EOL_NUL);
+	if (client->rawrequest == NULL)
 		goto error;
 
 	client->headers = calloc(1, sizeof(struct evkeyvalq));
@@ -117,38 +117,54 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 		goto error;
 
 	client->buf_out = evbuffer_new();
+	if(client->buf_out == NULL)
+		goto error;
+
+	client->request = client->rawrequest;
+
+	/* skip leading whitespace */
+	while(*client->request == '\r' || *client->request == '\n')
+		*(client->request)++;
 
 	if(stomp_parse_headers(client->headers, client->request) != 0){
-		evbuffer_add_printf(client->buf_out, "Invalid Request\n");
+		evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:Invalid Request\r\n");
 		goto error;
 	}
 
 	if(client->authenticated == 0){
 		if(strncmp(client->request, "CONNECT", 7) == 0)
 			stomp_connect(client);
-		else if(strncmp(client->request, "DISCONNECT", 11) == 0)
+		else if(strncmp(client->request, "DISCONNECT", 10) == 0)
 			stomp_disconnect(client);
 		else
-			evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:unknown command\r\n");
+			evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:Unknown command\r\n");
 	}
 	else {
-		if(strncmp(client->request, "SUBSCRIBE", 7) == 0)
+		if(strncmp(client->request, "SUBSCRIBE", 9) == 0)
 			stomp_subscribe(client);
+		else if(strncmp(client->request, "DISCONNECT", 10) == 0)
+			stomp_disconnect(client);
 		else
-			evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:unknown command\r\n");
+			evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:Unknown command\r\n");
 	}
 		
 error:
-	bufferevent_write_buffer(bev, client->buf_out);
-
-	if(client->buf_out)
+	if(client->buf_out){
+		bufferevent_write_buffer(bev, client->buf_out);
 		evbuffer_free(client->buf_out);
+		client->buf_out = NULL;
+	}
 
-	if(client->headers)
+	if(client->headers){
 		free(client->headers);
+		client->headers = NULL;
+	}
 
-	if(client->request)
-		free(client->request);
+	if(client->rawrequest){
+		free(client->rawrequest);
+		client->rawrequest = NULL;
+		client->request = NULL;
+	}
 }
 
 /**

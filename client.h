@@ -46,6 +46,9 @@ struct client {
    /* The output buffer for this client. */
    struct evbuffer *buf_out;
 
+   /* Request with probably padding */
+   char *rawrequest;
+
    /* Plain request */
    char *request;
 
