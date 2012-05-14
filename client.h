@@ -40,11 +40,9 @@ struct client {
    /* Authentication flag for this connection. */
    int authenticated;
 
-   /* The bufferedevent for this client. */
-   struct bufferevent *buf_in;
 
-   /* The output buffer for this client. */
-   struct evbuffer *buf_out;
+   /* The bufferedevent for this client. */
+   struct bufferevent *request_buf;
 
    /* Request with probably padding */
    char *rawrequest;
@@ -53,7 +51,18 @@ struct client {
    char *request;
 
    /* Parsed Headers */
-   struct evkeyvalq *headers;
+   struct evkeyvalq *request_headers;
+
+
+   /* The output buffer for this client. */
+   struct evbuffer *response_buf;
+
+   /* Response body */
+   char *response;
+
+   /* Response Headers */
+   struct evkeyvalq *response_headers;
+
 
    TAILQ_ENTRY(client) entries;
 };

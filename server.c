@@ -112,12 +112,12 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	if (client->rawrequest == NULL)
 		goto error;
 
-	client->headers = calloc(1, sizeof(struct evkeyvalq));
-	if(client->headers == NULL)
+	client->request_headers = calloc(1, sizeof(struct evkeyvalq));
+	if(client->request_headers == NULL)
 		goto error;
 
-	client->buf_out = evbuffer_new();
-	if(client->buf_out == NULL)
+	client->response_buf = evbuffer_new();
+	if(client->response_buf == NULL)
 		goto error;
 
 	client->request = client->rawrequest;
@@ -126,8 +126,8 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	while(*client->request == '\r' || *client->request == '\n')
 		*(client->request)++;
 
-	if(stomp_parse_headers(client->headers, client->request) != 0){
-		evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:Invalid Request\r\n");
+	if(stomp_parse_headers(client->request_headers, client->request) != 0){
+		evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage:Invalid Request\r\n");
 		goto error;
 	}
 
@@ -137,7 +137,7 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 		else if(strncmp(client->request, "DISCONNECT", 10) == 0)
 			stomp_disconnect(client);
 		else
-			evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:Unknown command\r\n");
+			evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage:Unknown command\r\n");
 	}
 	else {
 		if(strncmp(client->request, "SUBSCRIBE", 9) == 0)
@@ -145,19 +145,19 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 		else if(strncmp(client->request, "DISCONNECT", 10) == 0)
 			stomp_disconnect(client);
 		else
-			evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage:Unknown command\r\n");
+			evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage:Unknown command\r\n");
 	}
 		
 error:
-	if(client->buf_out){
-		bufferevent_write_buffer(bev, client->buf_out);
-		evbuffer_free(client->buf_out);
-		client->buf_out = NULL;
+	if(client->response_buf){
+		bufferevent_write_buffer(bev, client->response_buf);
+		evbuffer_free(client->response_buf);
+		client->response_buf = NULL;
 	}
 
-	if(client->headers){
-		free(client->headers);
-		client->headers = NULL;
+	if(client->request_headers){
+		free(client->request_headers);
+		client->request_headers = NULL;
 	}
 
 	if(client->rawrequest){
@@ -203,7 +203,7 @@ void buffered_on_error(struct bufferevent *bev, short what, void *arg)
 
 	/* TODO: remove from subscribers */
 
-	bufferevent_free(client->buf_in);
+	bufferevent_free(client->request_buf);
 	close(client->fd);
 	free(client);
 }
@@ -236,13 +236,13 @@ void on_accept(int fd, short ev, void *arg)
 
 	client->fd = client_fd;
 	client->authenticated = 0;
-	client->buf_in = bufferevent_socket_new(base, client_fd, 0); 
-	bufferevent_setcb(client->buf_in, buffered_on_read, buffered_on_write,
+	client->request_buf = bufferevent_socket_new(base, client_fd, 0); 
+	bufferevent_setcb(client->request_buf, buffered_on_read, buffered_on_write,
 		buffered_on_error, client);
 
 	/* We have to enable it before our callbacks will be
 	 * called. */
-	bufferevent_enable(client->buf_in, EV_READ);
+	bufferevent_enable(client->request_buf, EV_READ);
 }
 
 int main(int argc, char **argv)

@@ -42,26 +42,26 @@ int stomp_connect(struct client *client)
    const char *login;
    const char *passcode;
 
-   login = evhttp_find_header(client->headers, "login");
+   login = evhttp_find_header(client->request_headers, "login");
    if(login == NULL){
-      evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage: Authentication failed\r\n");
+      evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage: Authentication failed\r\n");
       return 1;
    }
 
-   passcode = evhttp_find_header(client->headers, "passcode");
+   passcode = evhttp_find_header(client->request_headers, "passcode");
    if(passcode == NULL){
-      evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage: Authentication failed\r\n");
+      evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage: Authentication failed\r\n");
       return 1;
    }
 
    if(strcmp(login, AUTH_USER) != 0 || strcmp(passcode, AUTH_PASS) != 0){
-      evbuffer_add_printf(client->buf_out, "ERROR\r\nmessage: Authentication failed\r\n");
+      evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage: Authentication failed\r\n");
       return 1;
    }
 
    client->authenticated = 1;
 
-   evbuffer_add_printf(client->buf_out, "CONNECTED\r\nsession:%d\r\n", 0);
+   evbuffer_add_printf(client->response_buf, "CONNECTED\r\nsession:%d\r\n", 0);
 
    return 0;
 }
@@ -80,16 +80,16 @@ int stomp_subscribe(struct client *client)
    struct queue *entry, *tmp_entry;
    const char *queuename;
 
-   queuename = evhttp_find_header(client->headers, "destination");
+   queuename = evhttp_find_header(client->request_headers, "destination");
    if(queuename == NULL){
-      evbuffer_add_printf(client->buf_out, "Destination header missing\n");
+      evbuffer_add_printf(client->response_buf, "Destination header missing\n");
       return 1;
    }
          
    for (entry = TAILQ_FIRST(&queues); entry != NULL; entry = tmp_entry) {
       tmp_entry = TAILQ_NEXT(entry, entries);
       if (strcmp(entry->queuename, queuename) == 0){
-         evbuffer_add_printf(client->buf_out, "queue %s found\n", queuename);
+         evbuffer_add_printf(client->response_buf, "queue %s found\n", queuename);
          entry = tmp_entry;
          break;
       }
@@ -101,7 +101,7 @@ int stomp_subscribe(struct client *client)
       strcpy(entry->queuename, queuename);
       TAILQ_INIT(&entry->subscribers);
       TAILQ_INSERT_TAIL(&queues, entry, entries);
-      evbuffer_add_printf(client->buf_out, "queue %s created\n", queuename);
+      evbuffer_add_printf(client->response_buf, "queue %s created\n", queuename);
    }
 
    /* TODO: check if already subscribed */
