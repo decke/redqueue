@@ -107,6 +107,8 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	 * bufferevent_write_buffer will drain the incoming data so it
 	 * is effectively gone after we call it. */
 	struct client *client = (struct client *)arg;
+
+        client->bev = bev;
 	
 	client->rawrequest = evbuffer_readln(bufferevent_get_input(bev), NULL, EVBUFFER_EOL_NUL);
 	if (client->rawrequest == NULL)
@@ -145,7 +147,6 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 
 error:
 	if(client->response_buf){
-		bufferevent_write_buffer(bev, client->response_buf);
 		evbuffer_free(client->response_buf);
 		client->response_buf = NULL;
 	}
@@ -181,6 +182,8 @@ void buffered_on_write(struct bufferevent *bev, void *arg)
  */
 void buffered_on_error(struct bufferevent *bev, short what, void *arg)
 {
+	/* TODO: rewrite to use stomp_free_client() */
+
 	struct client *client = (struct client *)arg;
 	struct client *entry, *tmp_entry;
 
@@ -201,9 +204,7 @@ void buffered_on_error(struct bufferevent *bev, short what, void *arg)
 		}
 	}
 
-	/* TODO: remove from subscribers */
-
-	bufferevent_free(client->request_buf);
+	bufferevent_free(client->bev);
 	close(client->fd);
 	free(client);
 }
@@ -236,13 +237,13 @@ void on_accept(int fd, short ev, void *arg)
 
 	client->fd = client_fd;
 	client->authenticated = 0;
-	client->request_buf = bufferevent_socket_new(base, client_fd, 0); 
-	bufferevent_setcb(client->request_buf, buffered_on_read, buffered_on_write,
+	client->bev = bufferevent_socket_new(base, client_fd, BEV_OPT_CLOSE_ON_FREE); 
+	bufferevent_setcb(client->bev, buffered_on_read, buffered_on_write,
 		buffered_on_error, client);
 
 	/* We have to enable it before our callbacks will be
 	 * called. */
-	bufferevent_enable(client->request_buf, EV_READ);
+	bufferevent_enable(client->bev, EV_READ);
 }
 
 int main(int argc, char **argv)

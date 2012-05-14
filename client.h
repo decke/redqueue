@@ -40,9 +40,9 @@ struct client {
    /* Authentication flag for this connection. */
    int authenticated;
 
-
    /* The bufferedevent for this client. */
-   struct bufferevent *request_buf;
+   struct bufferevent *bev;
+
 
    /* Request with probably padding */
    char *rawrequest;

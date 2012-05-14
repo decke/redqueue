@@ -52,10 +52,12 @@ enum stomp_cmd {
 extern int stomp_connect(struct client *client);
 extern int stomp_disconnect(struct client *client);
 extern int stomp_subscribe(struct client *client);
+extern int stomp_send(struct client *client);
 
 extern int stomp_handle_request(struct client *client);
 extern int stomp_handle_response(struct client *client);
 extern int stomp_parse_headers(struct evkeyvalq *headers, char *request);
+extern void stomp_free_client(struct client *client);
 
  
 #endif /* _STOMP_H_ */
