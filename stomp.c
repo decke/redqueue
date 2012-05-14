@@ -130,18 +130,20 @@ int stomp_connect(struct client *client)
    const char *login;
    const char *passcode;
 
-   login = evhttp_find_header(client->request_headers, "login");
-   if(login == NULL){
-      client->response_cmd = STOMP_CMD_ERROR;
-      evhttp_add_header(client->response_headers, "message", "Authentication failed");
-      return 1;
-   }
+   if(strlen(AUTH_USER) > 0 && strlen(AUTH_PASS) > 0){
+      login = evhttp_find_header(client->request_headers, "login");
+      if(login == NULL){
+         client->response_cmd = STOMP_CMD_ERROR;
+         evhttp_add_header(client->response_headers, "message", "Authentication failed");
+         return 1;
+      }
 
-   passcode = evhttp_find_header(client->request_headers, "passcode");
-   if(passcode == NULL){
-      client->response_cmd = STOMP_CMD_ERROR;
-      evhttp_add_header(client->response_headers, "message", "Authentication failed");
-      return 1;
+      passcode = evhttp_find_header(client->request_headers, "passcode");
+      if(passcode == NULL){
+         client->response_cmd = STOMP_CMD_ERROR;
+         evhttp_add_header(client->response_headers, "message", "Authentication failed");
+         return 1;
+      }
    }
 
    if(strcmp(login, AUTH_USER) != 0 || strcmp(passcode, AUTH_PASS) != 0){
