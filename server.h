@@ -34,7 +34,7 @@
 
 #define SERVER_PORT 8080
 
-#define AUTH_USER "test"
-#define AUTH_PASS "test"
+#define AUTH_USER ""
+#define AUTH_PASS ""
  
 #endif /* _SERVER_H_ */
