@@ -107,12 +107,17 @@ int stomp_handle_response(struct client *client)
          }
 
          evbuffer_add_printf(client->response_buf, "\n");
-         evbuffer_add(client->response_buf, client->response, strlen(client->response));
-         evbuffer_add(client->response_buf, '\0', 1);
+
+         if(client->response != NULL){
+            evbuffer_add(client->response_buf, client->response, strlen(client->response));
+         }
+
+         evbuffer_add(client->response_buf, "\0", 1);
 
          if(commandreg[i].cmd == STOMP_CMD_ERROR){
             client->authenticated = 0;
-            shutdown(client->fd, SHUT_RDWR);
+            /* TODO: fix shutdown */
+            //shutdown(client->fd, SHUT_RDWR);
          }
 
          return 0;
@@ -120,7 +125,7 @@ int stomp_handle_response(struct client *client)
    }
 
    evbuffer_add_printf(client->response_buf, "ERROR\nmessage:Internal error\n");
-   evbuffer_add(client->response_buf, '\0', 1);
+   evbuffer_add(client->response_buf, "\0", 1);
 
    return 1;
 }
@@ -217,14 +222,11 @@ int stomp_parse_headers(struct evkeyvalq *headers, char *request)
 
    evbuffer_add(buffer, request, strlen(request));
 
-   TAILQ_INIT(headers);
-
    while ((line = evbuffer_readln(buffer, &line_length, EVBUFFER_EOL_CRLF)) != NULL) {
       skey = NULL;
       svalue = NULL;
 
       if(strchr(line, ':') == NULL){
-         printf("IGNORING: <%s>\n", line);
          continue;
       }
 

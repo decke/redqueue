@@ -116,6 +116,8 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	if(client->request_headers == NULL)
 		goto error;
 
+	TAILQ_INIT(client->request_headers);
+
 	client->response_buf = evbuffer_new();
 	if(client->response_buf == NULL)
 		goto error;
@@ -123,6 +125,8 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	client->response_headers = calloc(1, sizeof(struct evkeyvalq));
 	if(client->response_headers == NULL)
 		goto error;
+
+	TAILQ_INIT(client->response_headers);
 
 	client->request = client->rawrequest;
 
