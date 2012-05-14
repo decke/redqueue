@@ -44,18 +44,18 @@ int stomp_connect(struct client *client)
 
    login = evhttp_find_header(client->request_headers, "login");
    if(login == NULL){
-      evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage: Authentication failed\r\n");
+      evbuffer_add_printf(client->response_buf, "ERROR\nmessage: Authentication failed\n");
       return 1;
    }
 
    passcode = evhttp_find_header(client->request_headers, "passcode");
    if(passcode == NULL){
-      evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage: Authentication failed\r\n");
+      evbuffer_add_printf(client->response_buf, "ERROR\nmessage: Authentication failed\n");
       return 1;
    }
 
    if(strcmp(login, AUTH_USER) != 0 || strcmp(passcode, AUTH_PASS) != 0){
-      evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage: Authentication failed\r\n");
+      evbuffer_add_printf(client->response_buf, "ERROR\nmessage: Authentication failed\n");
       return 1;
    }
 

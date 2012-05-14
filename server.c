@@ -127,7 +127,7 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 		*(client->request)++;
 
 	if(stomp_parse_headers(client->request_headers, client->request) != 0){
-		evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage:Invalid Request\r\n");
+		evbuffer_add_printf(client->response_buf, "ERROR\nmessage:Invalid Request\n");
 		goto error;
 	}
 
@@ -137,7 +137,7 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 		else if(strncmp(client->request, "DISCONNECT", 10) == 0)
 			stomp_disconnect(client);
 		else
-			evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage:Unknown command\r\n");
+			evbuffer_add_printf(client->response_buf, "ERROR\nmessage:Unknown command\n");
 	}
 	else {
 		if(strncmp(client->request, "SUBSCRIBE", 9) == 0)
@@ -145,7 +145,7 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 		else if(strncmp(client->request, "DISCONNECT", 10) == 0)
 			stomp_disconnect(client);
 		else
-			evbuffer_add_printf(client->response_buf, "ERROR\r\nmessage:Unknown command\r\n");
+			evbuffer_add_printf(client->response_buf, "ERROR\nmessage:Unknown command\n");
 	}
 		
 error:
