@@ -108,6 +108,12 @@ int stomp_handle_response(struct client *client)
          evbuffer_add_printf(client->response_buf, "\n");
          evbuffer_add(client->response_buf, client->response, strlen(client->response));
          evbuffer_add(client->response_buf, '\0', 1);
+
+         if(commandreg[i].cmd == STOMP_CMD_ERROR){
+            client->authenticated = 0;
+            shutdown(client->fd, SHUT_RDWR);
+         }
+
          return 0;
       }
    }
