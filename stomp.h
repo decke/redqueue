@@ -30,10 +30,31 @@
 #include <event2/buffer.h>
 #include <event2/http.h>
 
+enum stomp_direction {
+   STOMP_IN = 1,
+   STOMP_OUT
+};
+
+enum stomp_cmd {
+   STOMP_CMD_NONE = 0,
+   STOMP_CMD_CONNECT,
+   STOMP_CMD_CONNECTED,
+   STOMP_CMD_SEND,
+   STOMP_CMD_MESSAGE,
+   STOMP_CMD_SUBSCRIBE,
+   STOMP_CMD_UNSUBSCRIBE,
+   STOMP_CMD_ACK,
+   STOMP_CMD_RECEIPT,
+   STOMP_CMD_DISCONNECT,
+   STOMP_CMD_ERROR
+};
+
 extern int stomp_connect(struct client *client);
 extern int stomp_disconnect(struct client *client);
 extern int stomp_subscribe(struct client *client);
 
+extern int stomp_handle_request(struct client *client);
+extern int stomp_handle_response(struct client *client);
 extern int stomp_parse_headers(struct evkeyvalq *headers, char *request);
 
  

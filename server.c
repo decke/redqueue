@@ -120,6 +120,10 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	if(client->response_buf == NULL)
 		goto error;
 
+	client->response_headers = calloc(1, sizeof(struct evkeyvalq));
+	if(client->response_headers == NULL)
+		goto error;
+
 	client->request = client->rawrequest;
 
 	/* skip leading whitespace */
@@ -127,32 +131,24 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 		*(client->request)++;
 
 	if(stomp_parse_headers(client->request_headers, client->request) != 0){
-		evbuffer_add_printf(client->response_buf, "ERROR\nmessage:Invalid Request\n");
+		client->response_cmd = STOMP_CMD_ERROR;
+		evhttp_add_header(client->response_headers, "message", "Invalid Request");
 		goto error;
 	}
 
-	if(client->authenticated == 0){
-		if(strncmp(client->request, "CONNECT", 7) == 0)
-			stomp_connect(client);
-		else if(strncmp(client->request, "DISCONNECT", 10) == 0)
-			stomp_disconnect(client);
-		else
-			evbuffer_add_printf(client->response_buf, "ERROR\nmessage:Unknown command\n");
-	}
-	else {
-		if(strncmp(client->request, "SUBSCRIBE", 9) == 0)
-			stomp_subscribe(client);
-		else if(strncmp(client->request, "DISCONNECT", 10) == 0)
-			stomp_disconnect(client);
-		else
-			evbuffer_add_printf(client->response_buf, "ERROR\nmessage:Unknown command\n");
-	}
-		
+        stomp_handle_request(client);
+        stomp_handle_response(client);
+
 error:
 	if(client->response_buf){
 		bufferevent_write_buffer(bev, client->response_buf);
 		evbuffer_free(client->response_buf);
 		client->response_buf = NULL;
+	}
+
+	if(client->response_headers){
+		free(client->response_headers);
+		client->response_headers = NULL;
 	}
 
 	if(client->request_headers){

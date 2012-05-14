@@ -47,7 +47,10 @@ struct client {
    /* Request with probably padding */
    char *rawrequest;
 
-   /* Plain request */
+   /* Parsed command */
+   int request_cmd;
+
+   /* Plain request including headers and command */
    char *request;
 
    /* Parsed Headers */
@@ -56,6 +59,9 @@ struct client {
 
    /* The output buffer for this client. */
    struct evbuffer *response_buf;
+
+   /* Response command */
+   int response_cmd;
 
    /* Response body */
    char *response;
