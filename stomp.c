@@ -93,6 +93,7 @@ int stomp_handle_request(struct client *client)
 int stomp_handle_response(struct client *client)
 {
    int i;
+   struct evkeyval *header;
 
    for(i=0; i < sizeof(commandreg)/sizeof(struct CommandHandler); i++){
       if(commandreg[i].direction != STOMP_OUT)
@@ -100,10 +101,10 @@ int stomp_handle_response(struct client *client)
 
       if(commandreg[i].cmd == client->response_cmd){
          evbuffer_add_printf(client->response_buf, "%s\n", commandreg[i].command);
-         /* TODO: iterate all response_headers and append them */
 
-         if(evhttp_find_header(client->response_headers, "message") != NULL)
-            evbuffer_add_printf(client->response_buf, "message:%s\n", evhttp_find_header(client->response_headers, "message"));
+         TAILQ_FOREACH(header, client->response_headers, next) {
+            evbuffer_add_printf(client->response_buf, "%s:%s\n", header->key, header->value);
+         }
 
          evbuffer_add_printf(client->response_buf, "\n");
          evbuffer_add(client->response_buf, client->response, strlen(client->response));
