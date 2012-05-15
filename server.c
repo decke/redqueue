@@ -112,8 +112,6 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	 * is effectively gone after we call it. */
 	struct client *client = (struct client *)arg;
 
-        client->bev = bev;
-	
 	client->rawrequest = evbuffer_readln(bufferevent_get_input(bev), NULL, EVBUFFER_EOL_NUL);
 	if (client->rawrequest == NULL)
 		goto error;
@@ -150,14 +148,21 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
         stomp_handle_response(client);
 
 error:
-	if(client->response_buf){
-		evbuffer_free(client->response_buf);
-		client->response_buf = NULL;
+	client->request_cmd = STOMP_CMD_NONE;
+	client->response_cmd = STOMP_CMD_NONE;
+
+	if(client->request){
+		client->request = NULL;
 	}
 
 	if(client->response_headers){
 		free(client->response_headers);
 		client->response_headers = NULL;
+	}
+
+	if(client->response_buf){
+		evbuffer_free(client->response_buf);
+		client->response_buf = NULL;
 	}
 
 	if(client->request_headers){
@@ -168,7 +173,6 @@ error:
 	if(client->rawrequest){
 		free(client->rawrequest);
 		client->rawrequest = NULL;
-		client->request = NULL;
 	}
 }
 
@@ -186,27 +190,16 @@ void buffered_on_write(struct bufferevent *bev, void *arg)
  */
 void buffered_on_error(struct bufferevent *bev, short what, void *arg)
 {
-	/* TODO: rewrite to use stomp_free_client() */
-
 	struct client *client = (struct client *)arg;
-	struct client *entry, *tmp_entry;
 
 	if (what & BEV_EVENT_EOF) {
-		/* Client disconnected, remove the read event and the
-		 * free the client structure. */
-		printf("Client disconnected.\n");
+		loginfo("Client %d disconnected.", client->fd);
 	}
 	else {
-		warn("Client socket error, disconnecting.\n");
+		logwarn("Client %d socket error, disconnecting.", client->fd);
 	}
 
-	for (entry = TAILQ_FIRST(&clients); entry != NULL; entry = tmp_entry) {
-		tmp_entry = TAILQ_NEXT(entry, entries);
-		if ((void *)tmp_entry != NULL && client->fd == tmp_entry->fd) {
-			TAILQ_REMOVE(&clients, entry, entries);
-			free(entry);
-		}
-	}
+	stomp_free_client(client);
 
 	bufferevent_free(client->bev);
 	close(client->fd);
@@ -240,7 +233,6 @@ void on_accept(int fd, short ev, void *arg)
 		err(1, "malloc failed");
 
 	client->fd = client_fd;
-	client->authenticated = 0;
 	client->bev = bufferevent_socket_new(base, client_fd, BEV_OPT_CLOSE_ON_FREE); 
 	bufferevent_setcb(client->bev, buffered_on_read, buffered_on_write,
 		buffered_on_error, client);

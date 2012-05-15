@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/queue.h>
+#include <unistd.h>
 
 #include <event2/event.h>
 #include <event2/buffer.h>
@@ -35,6 +36,7 @@
 #include <event2/http.h>
 #include <event2/keyvalq_struct.h>
 
+#include "log.h"
 #include "util.h"
 #include "server.h"
 #include "client.h"
@@ -50,6 +52,8 @@ struct CommandHandler
 };
 
 struct CommandHandler commandreg[] = {
+   { STOMP_CMD_NONE, "", STOMP_OUT, NULL },
+   { STOMP_CMD_DISCONNECT, "", STOMP_OUT, NULL },
    { STOMP_CMD_CONNECT, "CONNECT", STOMP_IN, stomp_connect },
    { STOMP_CMD_CONNECTED, "CONNECTED", STOMP_OUT, NULL },
    { STOMP_CMD_SEND, "SEND", STOMP_IN, stomp_send },
@@ -81,8 +85,7 @@ int stomp_handle_request(struct client *client)
          }
 
          client->request_cmd = commandreg[i].cmd;
-         commandreg[i].handler(client);
-         return 0;
+         return commandreg[i].handler(client);
       }
    }
 
@@ -95,15 +98,21 @@ int stomp_handle_request(struct client *client)
 int stomp_handle_response(struct client *client)
 {
    int i;
+   int found;
    struct evkeyval *header;
 
-   for(i=0; i < sizeof(commandreg)/sizeof(struct CommandHandler); i++){
+   if(client->response_buf == NULL)
+      client->response_buf = evbuffer_new();
+
+   for(i=0,found=0; i < sizeof(commandreg)/sizeof(struct CommandHandler); i++){
       if(commandreg[i].direction != STOMP_OUT)
          continue;
 
       if(commandreg[i].cmd == client->response_cmd){
-         if(client->response_buf == NULL)
-            client->response_buf = evbuffer_new();
+         found = 1;
+
+         if(commandreg[i].command[0] == '\0')
+            break;
 
          evbuffer_add_printf(client->response_buf, "%s\n", commandreg[i].command);
 
@@ -119,20 +128,24 @@ int stomp_handle_response(struct client *client)
 
          evbuffer_add(client->response_buf, "\0", 1);
 
-         if(commandreg[i].cmd == STOMP_CMD_ERROR){
-            client->authenticated = 0;
-            bufferevent_write_buffer(client->bev, client->response_buf);
-            stomp_free_client(client);
-         }
-
-         return 0;
+         break;
       }
    }
 
-   evbuffer_add_printf(client->response_buf, "ERROR\nmessage:Internal error\n");
-   evbuffer_add(client->response_buf, "\0", 1);
+   if(found == 0){
+      evbuffer_add_printf(client->response_buf, "ERROR\n");
+      evbuffer_add_printf(client->response_buf, "message:Internal error\n\n");
+      evbuffer_add(client->response_buf, "\0", 1);
+   }
 
-   return 1;
+   bufferevent_write_buffer(client->bev, client->response_buf);
+   bufferevent_flush(client->bev, EV_WRITE, BEV_FINISHED);
+
+   if(client->response_cmd == STOMP_CMD_ERROR || client->response_cmd == STOMP_CMD_DISCONNECT){
+      stomp_free_client(client);
+   }
+
+   return !found;
 }
 
 
@@ -173,8 +186,7 @@ int stomp_connect(struct client *client)
 
 int stomp_disconnect(struct client *client)
 {
-   client->authenticated = 0;
-   stomp_free_client(client);
+   client->response_cmd = STOMP_CMD_DISCONNECT;
 
    return 0;
 }
@@ -184,6 +196,8 @@ int stomp_subscribe(struct client *client)
 {
    struct queue *entry, *tmp_entry;
    const char *queuename;
+
+   client->response_cmd = STOMP_CMD_NONE;
 
    queuename = evhttp_find_header(client->request_headers, "destination");
    if(queuename == NULL){
@@ -242,12 +256,24 @@ int stomp_send(struct client *client)
       TAILQ_FOREACH(subscriber, &queue->subscribers, entries){
          subscriber->response_cmd = STOMP_CMD_MESSAGE;
          subscriber->response_headers = client->request_headers;
+
+         if(strstr(client->request, "\r\n\r\n") != NULL){
+            subscriber->response = strstr(client->request, "\r\n\r\n")+4;
+         }
+
          stomp_handle_response(subscriber);
+
+         subscriber->response_cmd = STOMP_CMD_NONE;
+         subscriber->response_headers = NULL;
+         subscriber->response = NULL;
       }
    }
    else {
-      printf("No active subscribers on that queue\n");
+      loginfo("No active subscribers on that queue\n");
    }
+
+   client->response_cmd = STOMP_CMD_NONE;
+   client->response = NULL;
 
    return 0;
 }
@@ -305,7 +331,23 @@ void stomp_free_client(struct client *client)
    /* TODO: remove all subscriptions */
    /* TODO: free all allocated memory */
 
-   bufferevent_flush(client->bev, EV_WRITE, BEV_FINISHED);
-   //bufferevent_free(client->bev);
+   struct client *entry, *tmp_entry;
+
+   for (entry = TAILQ_FIRST(&clients); entry != NULL; entry = tmp_entry) {
+      tmp_entry = TAILQ_NEXT(entry, entries);
+      if ((void *)tmp_entry != NULL && client->fd == tmp_entry->fd) {
+         TAILQ_REMOVE(&clients, entry, entries);
+         free(entry);
+      }
+   }
+
+   client->authenticated = 0;
+   logwarn("Free client %d", client->fd);
+
+   if(client->response_cmd == STOMP_CMD_DISCONNECT){
+      bufferevent_free(client->bev);
+      close(client->fd);
+      free(client);
+   }
 }
 
