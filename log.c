@@ -107,6 +107,12 @@ int logwrite(int loglvl, const char *logfmt, ...)
         return 1;
     }
 
+    if(fprintf(stdout, "[%s] %s - %s\n", timeinfo, loglevelnames[loglvl], logmsg) < 0)
+    {
+        va_end(args);
+        return 1;
+    }
+
     va_end(args);
 
     fflush(logfile);
