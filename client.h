@@ -81,6 +81,8 @@ TAILQ_HEAD(, client) clients;
 
 struct queue {
    char *queuename;
+   volatile int read;
+   volatile int write;
 
    TAILQ_HEAD(, client) subscribers;
    TAILQ_ENTRY(queue) entries;
