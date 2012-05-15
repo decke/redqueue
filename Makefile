@@ -5,7 +5,7 @@
 LOCALBASE?=/usr/local
 
 # Development flags
-.if defined(DEBUG)
+.if !defined(NODEBUG)
 CFLAGS+=-g -Wall -DDEBUG
 .endif
 

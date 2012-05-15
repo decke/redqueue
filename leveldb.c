@@ -91,6 +91,8 @@ int leveldb_free(void)
     leveldb_writeoptions_destroy(woptions);
     leveldb_cache_destroy(cache);
     leveldb_env_destroy(env);
+
+    return 0;
 }
 
 
@@ -110,14 +112,14 @@ int leveldb_add_message(struct queue *queue, char *message)
     seq = atomic_fetchadd_int(&queue->write, 1);
     wb = leveldb_writebatch_create();
 
-    snprintf(key, sizeof(key)-1, "%s.%ld", queue->queuename, seq);
+    snprintf(key, sizeof(key)-1, "%s.%d", queue->queuename, seq);
     key[sizeof(key)-1] = '\0';
     leveldb_writebatch_put(wb, key, strlen(key), message, strlen(message));
 
     snprintf(key, sizeof(key)-1, "%s.write", queue->queuename);
     key[sizeof(key)-1] = '\0';
     
-    sprintf(value, "%s", seq);
+    sprintf(value, "%d", seq);
     leveldb_writebatch_put(wb, key, strlen(key), value, strlen(value));
 
     leveldb_write(db, woptions, wb, &error);
