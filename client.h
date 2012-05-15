@@ -53,6 +53,9 @@ struct client {
    /* Plain request including headers and command */
    char *request;
 
+   /* Request body */
+   char *request_body;
+
    /* Parsed Headers */
    struct evkeyvalq *request_headers;
 

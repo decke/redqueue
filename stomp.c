@@ -99,10 +99,23 @@ int stomp_handle_response(struct client *client)
 {
    int i;
    int found;
+   const char *receipt;
    struct evkeyval *header;
 
    if(client->response_buf == NULL)
       client->response_buf = evbuffer_new();
+
+   if(client->request_headers){
+      receipt = evhttp_find_header(client->request_headers, "receipt");
+      if(receipt != NULL && client->response_cmd != STOMP_CMD_ERROR){
+         evbuffer_add_printf(client->response_buf, "RECEIPT\n");
+         evbuffer_add_printf(client->response_buf, "receipt:%s\n", receipt);
+         evbuffer_add_printf(client->response_buf, "\n");
+         evbuffer_add(client->response_buf, "\0", 1);
+
+         evhttp_remove_header(client->request_headers, "receipt");
+      }
+   }
 
    for(i=0,found=0; i < sizeof(commandreg)/sizeof(struct CommandHandler); i++){
       if(commandreg[i].direction != STOMP_OUT)
@@ -117,6 +130,9 @@ int stomp_handle_response(struct client *client)
          evbuffer_add_printf(client->response_buf, "%s\n", commandreg[i].command);
 
          TAILQ_FOREACH(header, client->response_headers, next) {
+            if(strcmp(header->key, "receipt") == 0)
+               continue;
+
             evbuffer_add_printf(client->response_buf, "%s:%s\n", header->key, header->value);
          }
 
@@ -174,6 +190,12 @@ int stomp_connect(struct client *client)
          evhttp_add_header(client->response_headers, "message", "Authentication failed");
          return 1;
       }
+   }
+
+   if(evhttp_find_header(client->request_headers, "receipt") != NULL){
+      client->response_cmd = STOMP_CMD_ERROR;
+      evhttp_add_header(client->response_headers, "message", "Receipt for connect not supported");
+      return 1;
    }
 
    client->authenticated = 1;
@@ -242,10 +264,6 @@ int stomp_send(struct client *client)
       return 1;
    }
 
-   if(strncmp(queuename, "/topic/", 7) != 0){
-      /* Store message in LevelDB */
-   }
-
    TAILQ_FOREACH(queue, &queues, entries) {
       if(strcmp(queue->queuename, queuename) == 0)
          break;
@@ -256,10 +274,7 @@ int stomp_send(struct client *client)
       TAILQ_FOREACH(subscriber, &queue->subscribers, entries){
          subscriber->response_cmd = STOMP_CMD_MESSAGE;
          subscriber->response_headers = client->request_headers;
-
-         if(strstr(client->request, "\r\n\r\n") != NULL){
-            subscriber->response = strstr(client->request, "\r\n\r\n")+4;
-         }
+         subscriber->response = client->request_body;
 
          stomp_handle_response(subscriber);
 
@@ -268,8 +283,10 @@ int stomp_send(struct client *client)
          subscriber->response = NULL;
       }
    }
-   else {
-      loginfo("No active subscribers on that queue\n");
+   else if(strncmp(queuename, "/topic/", 7) != 0){
+      /* TODO: Store message in LevelDB */
+
+      loginfo("No active subscribers on that queue");
    }
 
    client->response_cmd = STOMP_CMD_NONE;

@@ -138,6 +138,13 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	while(*client->request == '\r' || *client->request == '\n')
 		*(client->request)++;
 
+	if(strstr(client->request, "\r\n\r\n") != NULL){
+		client->request_body = strstr(client->request, "\r\n\r\n")+4;
+	}
+	else if(strstr(client->request, "\n\n") != NULL){
+		client->request_body = strstr(client->request, "\n\n")+2;
+	}
+
 	if(stomp_parse_headers(client->request_headers, client->request) != 0){
 		client->response_cmd = STOMP_CMD_ERROR;
 		evhttp_add_header(client->response_headers, "message", "Invalid Request");
@@ -150,10 +157,8 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 error:
 	client->request_cmd = STOMP_CMD_NONE;
 	client->response_cmd = STOMP_CMD_NONE;
-
-	if(client->request){
-		client->request = NULL;
-	}
+	client->request_body = NULL;
+	client->request = NULL;
 
 	if(client->response_headers){
 		free(client->response_headers);
