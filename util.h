@@ -24,12 +24,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _SERVER_H_
-#define _SERVER_H_
+#ifndef _UTIL_H_
+#define _UTIL_H_
 
-#define REDQUEUE_VERSION "0.0.1"
-#define DAEMON_NAME "redqd"
-#define CONF_FILE "redqd.conf"
-#define PID_FILE "/var/run/redqd.pid"
+#define CONFIGMAXKEY 25
+#define CONFIGMAXVALUE 50
 
-#endif /* _SERVER_H_ */
+extern int configparse(char *filename);
+extern char* configget(char *key);
+extern int configset(char *key, char *value);
+
+#endif /* _UTIL_H_ */

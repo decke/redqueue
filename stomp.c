@@ -35,6 +35,7 @@
 #include <event2/http.h>
 #include <event2/keyvalq_struct.h>
 
+#include "util.h"
 #include "server.h"
 #include "client.h"
 #include "stomp.h"
@@ -140,7 +141,7 @@ int stomp_connect(struct client *client)
    const char *login;
    const char *passcode;
 
-   if(strlen(AUTH_USER) > 0 && strlen(AUTH_PASS) > 0){
+   if(strlen(configget("authUser")) > 0 && strlen(configget("authPass")) > 0){
       login = evhttp_find_header(client->request_headers, "login");
       if(login == NULL){
          client->response_cmd = STOMP_CMD_ERROR;
@@ -155,7 +156,7 @@ int stomp_connect(struct client *client)
          return 1;
       }
 
-      if(strcmp(login, AUTH_USER) != 0 || strcmp(passcode, AUTH_PASS) != 0){
+      if(strcmp(login, configget("authUser")) != 0 || strcmp(passcode, configget("authPass")) != 0){
          client->response_cmd = STOMP_CMD_ERROR;
          evhttp_add_header(client->response_headers, "message", "Authentication failed");
          return 1;

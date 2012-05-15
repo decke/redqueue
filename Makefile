@@ -2,24 +2,27 @@
 # Simple libevent based STOMP server
 #
 
+# Development flags
+CFLAGS+=-g -Wall
+
 LOCALBASE?=/usr/local
 
-CPPFLAGS=-I${LOCALBASE}/include -g -Wall
-LDFLAGS=-L${LOCALBASE}/lib/event2 -L${LOCALBASE}/lib
+CFLAGS+=-I${LOCALBASE}/include
+LDFLAGS+=-L${LOCALBASE}/lib/event2 -L${LOCALBASE}/lib
 
-SRC =	server.c common.c stomp.c
-OBJS =	${SRC:.c=.o}
+SRC=	log.c util.c server.c common.c stomp.c
+OBJS=	${SRC:.c=.o}
 
-all:	redqueue
+all:	redqd
 
 clean:
 	@rm -f *.o *.core
 
-redqueue:	${OBJS}
-	$(CC) $(LDFLAGS) -levent -lleveldb ${OBJS} -o redqueue
+redqd:	${OBJS}
+	$(CC) $(LDFLAGS) -levent -lleveldb ${OBJS} -o redqd
 
 # SUFFIX RULES
 .SUFFIXES: .c .o
 
 .c.o:
-	$(CC) $(CPPFLAGS) -c ${.IMPSRC}
+	$(CC) $(CFLAGS) -c ${.IMPSRC}

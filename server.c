@@ -28,8 +28,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <syslog.h>
 #include <signal.h>
+#include <limits.h>
 
 /* Required by event.h. */
 #include <sys/time.h>
@@ -53,6 +53,8 @@
 /* LevelDB */
 #include <leveldb/c.h>
 
+#include "log.h"
+#include "util.h"
 #include "common.h"
 #include "server.h"
 #include "client.h"
@@ -72,11 +74,13 @@ void signal_handler(int sig) {
 	switch(sig) {
 		case SIGTERM:
 		case SIGHUP:
+			logclose();
+			logopen(configget("logFile"));
 		case SIGINT:
 			event_base_loopbreak(base);
 			break;
         default:
-            syslog(LOG_WARNING, "Unhandled signal (%d) %s", sig, strsignal(sig));
+            logwarn("Unhandled signal (%d) %s", sig, strsignal(sig));
             break;
     }
 }
@@ -248,9 +252,9 @@ void on_accept(int fd, short ev, void *arg)
 
 int main(int argc, char **argv)
 {
+	char config[PATH_MAX] = CONF_FILE;
 	int listen_fd, ch;
 	int daemon = 0;
-	int port = SERVER_PORT;
 	struct sockaddr_in listen_addr;
 	struct event *ev_accept;
 	int reuseaddr_on;
@@ -267,16 +271,24 @@ int main(int argc, char **argv)
 	signal(SIGINT, signal_handler);
 	signal(SIGQUIT, signal_handler);
 
-	while ((ch = getopt(argc, argv, "dp:")) != -1) {
+	while ((ch = getopt(argc, argv, "d:")) != -1) {
 	    switch (ch) {
 	    case 'd':
 	        daemon = 1;
 	        break;
-	    case 'p':
-	        port = atoi(optarg);
-	        break;
 	    }
 	}
+
+	if(configparse(config)){
+		printf("Could not load config file %s\n", config);
+		exit(EXIT_FAILURE);
+	}
+  
+	if(logopen(configget("logFile")) != 0)
+		exit(EXIT_FAILURE);
+            
+	logwrite(LOG_INFO, "-------------------------------");
+	logwrite(LOG_INFO, "%s/%s started", DAEMON_NAME, REDQUEUE_VERSION);
 
 	if (daemon) {
 	    pid = fork();
@@ -307,7 +319,7 @@ int main(int argc, char **argv)
 	leveldb_options_set_create_if_missing(options, 1);
 	leveldb_options_set_error_if_exists(options, 0);
 
-	db = leveldb_open(options, "/tmp/redqueue.db", &error);
+	db = leveldb_open(options, configget("dbFile"), &error);
 	CheckNoError(error);
 	
 	/* Initialize libevent. */
@@ -321,7 +333,7 @@ int main(int argc, char **argv)
 	memset(&listen_addr, 0, sizeof(listen_addr));
 	listen_addr.sin_family = AF_INET;
 	listen_addr.sin_addr.s_addr = INADDR_ANY;
-	listen_addr.sin_port = htons(port);
+	listen_addr.sin_port = htons(atoi(configget("listenPort")));
 
 	if (bind(listen_fd, (struct sockaddr *)&listen_addr, sizeof(listen_addr)) < 0)
 		err(1, "bind failed");
@@ -352,6 +364,8 @@ int main(int argc, char **argv)
 	leveldb_options_destroy(options);
 	leveldb_cache_destroy(cache);
 	leveldb_env_destroy(env);
+
+	logclose();
 
 	return 0;
 }

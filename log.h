@@ -24,12 +24,25 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _SERVER_H_
-#define _SERVER_H_
+#ifndef _LOG_H_
+#define _LOG_H_
 
-#define REDQUEUE_VERSION "0.0.1"
-#define DAEMON_NAME "redqd"
-#define CONF_FILE "redqd.conf"
-#define PID_FILE "/var/run/redqd.pid"
+enum loglevels
+{
+    LOG_ERROR,
+    LOG_WARN,
+    LOG_INFO,
+    LOG_DEBUG
+};
 
-#endif /* _SERVER_H_ */
+#define logdebug(format, args...) logwrite(LOG_DEBUG, format, ##args)
+#define loginfo(format, args...) logwrite(LOG_INFO, format, ##args)
+#define logwarn(format, args...) logwrite(LOG_WARN, format, ##args)
+#define logerror(format, args...) logwrite(LOG_ERROR, format, ##args)
+
+extern int logopen(char *filename);
+extern int logclose(void);
+extern int logsetlevel(int loglvl);
+extern int logwrite(int loglvl, const char *logfmt, ...);
+
+#endif /* _LOG_H_ */
