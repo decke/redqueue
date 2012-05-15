@@ -50,24 +50,15 @@
 #include <event2/http.h>
 #include <event2/keyvalq_struct.h>
 
-/* LevelDB */
-#include <leveldb/c.h>
-
 #include "log.h"
 #include "util.h"
 #include "common.h"
 #include "server.h"
 #include "client.h"
 #include "stomp.h"
+#include "leveldb.h"
 
 struct event_base *base;
-
-
-#define CheckNoError(err) \
-        if ((err) != NULL) { \
-                fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, (err)); \
-                abort(); \
-        }
 
 
 void signal_handler(int sig) {
@@ -257,12 +248,6 @@ int main(int argc, char **argv)
 	int reuseaddr_on;
 	pid_t pid, sid;
 
-	leveldb_t* db;
-	leveldb_cache_t* cache;
-	leveldb_env_t* env;
-	leveldb_options_t* options;
-	char *error = NULL;
-
 	signal(SIGHUP, signal_handler);
 	signal(SIGTERM, signal_handler);
 	signal(SIGINT, signal_handler);
@@ -306,18 +291,11 @@ int main(int argc, char **argv)
 	TAILQ_INIT(&clients);
 	TAILQ_INIT(&queues);
 
+#ifdef WITH_LEVELDB
 	/* Initialize LevelDB */
-	env = leveldb_create_default_env();
-	cache = leveldb_cache_create_lru(100000);
-
-	options = leveldb_options_create();
-	leveldb_options_set_cache(options, cache);
-	leveldb_options_set_env(options, env);
-	leveldb_options_set_create_if_missing(options, 1);
-	leveldb_options_set_error_if_exists(options, 0);
-
-	db = leveldb_open(options, configget("dbFile"), &error);
-	CheckNoError(error);
+	if(leveldb_init() != 0)
+            exit(EXIT_FAILURE);
+#endif
 	
 	/* Initialize libevent. */
 	base = event_base_new();
@@ -355,14 +333,12 @@ int main(int argc, char **argv)
 
 	shutdown(listen_fd, SHUT_RDWR);
 	close(listen_fd);
-	printf("dying\n");
 
-	leveldb_close(db);
-	leveldb_options_destroy(options);
-	leveldb_cache_destroy(cache);
-	leveldb_env_destroy(env);
+#ifdef WITH_LEVELDB
+	leveldb_free();
+#endif
 
 	logclose();
 
-	return 0;
+	return EXIT_SUCCESS;
 }
