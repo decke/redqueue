@@ -25,6 +25,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* atomic_fetchadd */
@@ -36,6 +37,7 @@
 #include "log.h"
 #include "util.h"
 #include "client.h"
+#include "stomp.h"
 
 #define CheckNoError(err) \
     if ((err) != NULL) { \
@@ -99,12 +101,12 @@ int leveldb_free(void)
 int leveldb_add_message(struct queue *queue, char *message)
 {
     leveldb_writebatch_t *wb;
-    char key[256];
+    char key[MAXQUEUELEN+10];
     char value[16];
     char *error = NULL;
     int seq;
 
-    if(strlen(queue->queuename) > strlen(key)-10){
+    if(strlen(queue->queuename) >= MAXQUEUELEN){
         logerror("LevelDB add_message failed: Queuename too long");
         return 1;
     }
@@ -129,6 +131,60 @@ int leveldb_add_message(struct queue *queue, char *message)
         logerror("LevelDB add_message failed: %s", error);
         return 1;
     }
+
+    loginfo("Added message %d to %s: %.20s", queue->write, queue->queuename, message);
+
+    return 0;
+}
+
+int leveldb_load_queue(struct queue *queue)
+{
+    char key[MAXQUEUELEN+10];
+    char *value;
+    char *error = NULL;
+    size_t value_len;
+
+    if(strlen(queue->queuename) >= MAXQUEUELEN){
+        logerror("LevelDB add_message failed: Queuename too long");
+        return 1;
+    }
+
+    /* queuename.read */
+    snprintf(key, sizeof(key)-1, "%s.read", queue->queuename);
+    key[sizeof(key)-1] = '\0';
+
+    value = leveldb_get(db, roptions, key, strlen(key), &value_len, &error);
+    if(error != NULL){
+       logerror("LevelDB load_queue failed: %s", error);
+       return 1;
+    }
+
+    if(value != NULL){
+       queue->read = atoi(value)+1;
+       free(value);
+       value = NULL;
+    }
+    else
+       queue->read = 1;
+
+
+    /* queuename.write */
+    snprintf(key, sizeof(key)-1, "%s.write", queue->queuename);
+    key[sizeof(key)-1] = '\0';
+
+    value = leveldb_get(db, roptions, key, strlen(key), &value_len, &error);
+    if(error != NULL){
+       logerror("LevelDB load_queue failed: %s", error);
+       return 1;
+    }
+
+    if(value != NULL){
+       queue->write = atoi(value)+1;
+       free(value);
+       value = NULL;
+    }
+    else
+       queue->write = 1;
 
     return 0;
 }

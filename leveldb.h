@@ -33,5 +33,6 @@ extern int leveldb_free(void);
 extern int leveldb_add_message(struct queue *queue, char *message);
 extern char* leveldb_get_message(struct queue *queue);
 extern int leveldb_ack_message(struct queue *queue);
+extern int leveldb_load_queue(struct queue *queue);
 
 #endif /* _LEVELDB_H_ */

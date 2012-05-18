@@ -39,13 +39,14 @@
 #include "log.h"
 #include "stomp.h"
 #include "stomputil.h"
+#include "leveldb.h"
 
 
 struct queue* stomp_add_queue(const char *queuename)
 {
    struct queue *entry;
    
-   if(queuename == NULL || strlen(queuename) > 512)
+   if(queuename == NULL || strlen(queuename) >= MAXQUEUELEN)
       return NULL;
          
    entry = malloc(sizeof(*entry));
@@ -54,6 +55,16 @@ struct queue* stomp_add_queue(const char *queuename)
  
    TAILQ_INIT(&entry->subscribers);
    TAILQ_INSERT_TAIL(&queues, entry, entries);
+
+#ifdef WITH_LEVELDB
+   if(leveldb_load_queue(entry) != 0){
+      stomp_free_queue(entry);
+      return NULL;
+   }
+#else
+   entry->read = 1;
+   entry->write = 1;
+#endif
        
    return entry;
 }  
@@ -69,6 +80,12 @@ struct queue* stomp_find_queue(const char *queuename)
    }
 
    return NULL;
+}
+
+void stomp_free_queue(struct queue *queue)
+{
+   /* TODO: implement stomp_free_queue */
+   ;
 }
 
 void stomp_free_client(struct client *client)

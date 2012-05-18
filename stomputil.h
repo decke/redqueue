@@ -29,6 +29,7 @@
 
 extern struct queue* stomp_add_queue(const char *queuename);
 extern struct queue* stomp_find_queue(const char *queuename);
+extern void stomp_free_queue(struct queue *queue);
 
 extern int stomp_parse_headers(struct evkeyvalq *headers, char *request);
 extern void stomp_free_client(struct client *client);

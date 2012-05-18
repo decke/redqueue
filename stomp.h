@@ -30,6 +30,8 @@
 #include <event2/buffer.h>
 #include <event2/http.h>
 
+#define MAXQUEUELEN	128
+
 enum stomp_direction {
    STOMP_IN = 1,
    STOMP_OUT
