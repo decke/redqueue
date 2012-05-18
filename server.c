@@ -103,8 +103,14 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	 * bufferevent_write_buffer will drain the incoming data so it
 	 * is effectively gone after we call it. */
 	struct client *client = (struct client *)arg;
+        size_t read_len;
 
-	client->rawrequest = evbuffer_readln(bufferevent_get_input(bev), NULL, EVBUFFER_EOL_NUL);
+	client->rawrequest = evbuffer_readln(bufferevent_get_input(bev), &read_len, EVBUFFER_EOL_NUL);
+	if(read_len >= MAXREQUESTLEN){
+		client->response_cmd = STOMP_CMD_DISCONNECT;
+		goto response;
+	}
+
 	if (client->rawrequest == NULL)
 		goto error;
 
@@ -138,12 +144,13 @@ void buffered_on_read(struct bufferevent *bev, void *arg)
 	}
 
 	if(stomp_parse_headers(client->request_headers, client->request) != 0){
-		client->response_cmd = STOMP_CMD_ERROR;
-		evhttp_add_header(client->response_headers, "message", "Invalid Request");
-		goto error;
+		client->response_cmd = STOMP_CMD_DISCONNECT;
+		goto response;
 	}
 
         stomp_handle_request(client);
+
+response:
         stomp_handle_response(client);
 
 error:

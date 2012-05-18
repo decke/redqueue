@@ -128,7 +128,15 @@ int stomp_parse_headers(struct evkeyvalq *headers, char *request)
       skey = NULL;
       svalue = NULL;
 
+      if(line_length > MAXHEADERLEN){
+         free(line);
+         evbuffer_free(buffer);
+         logwarn("Request exceeded maximum header length %d", MAXHEADERLEN);
+         return 1;
+      }
+
       if(strchr(line, ':') == NULL){
+         free(line);
          continue;
       }
 
@@ -143,12 +151,12 @@ int stomp_parse_headers(struct evkeyvalq *headers, char *request)
 
       svalue += strspn(svalue, " ");
 
-      /* TODO: check if header with same name already parsed */
-
-      if (evhttp_add_header(headers, skey, svalue) == -1){
-         free(line);
-         evbuffer_free(buffer);
-         return 1;
+      if (evhttp_find_header(headers, skey) == NULL){
+         if (evhttp_add_header(headers, skey, svalue) == -1){
+            free(line);
+            evbuffer_free(buffer);
+            return 1;
+         }
       }
 
       free(line);

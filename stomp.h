@@ -31,6 +31,8 @@
 #include <event2/http.h>
 
 #define MAXQUEUELEN	128
+#define MAXHEADERLEN	512
+#define MAXREQUESTLEN	10240
 
 enum stomp_direction {
    STOMP_IN = 1,
