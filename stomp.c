@@ -41,6 +41,8 @@
 #include "server.h"
 #include "client.h"
 #include "stomp.h"
+#include "stomputil.h"
+#include "leveldb.h"
 
 /* internal data structs */
 struct CommandHandler
@@ -216,7 +218,7 @@ int stomp_disconnect(struct client *client)
 
 int stomp_subscribe(struct client *client)
 {
-   struct queue *entry, *tmp_entry;
+   struct queue *entry;
    const char *queuename;
 
    client->response_cmd = STOMP_CMD_NONE;
@@ -228,23 +230,15 @@ int stomp_subscribe(struct client *client)
       return 1;
    }
          
-   for (entry = TAILQ_FIRST(&queues); entry != NULL; entry = tmp_entry) {
-      tmp_entry = TAILQ_NEXT(entry, entries);
-      if (strcmp(entry->queuename, queuename) == 0){
-         entry = tmp_entry;
-         break;
+   entry = stomp_find_queue(queuename);
+   if (entry == NULL){
+      entry = stomp_add_queue(queuename);
+      if(entry == NULL){
+         client->response_cmd = STOMP_CMD_ERROR;
+         evhttp_add_header(client->response_headers, "message", "Could not create destination");
+         return 1;
       }
    }
-
-   if (entry == NULL){
-      entry = malloc(sizeof(*entry));
-      entry->queuename = malloc(strlen(queuename)+1);
-      strcpy(entry->queuename, queuename);
-      TAILQ_INIT(&entry->subscribers);
-      TAILQ_INSERT_TAIL(&queues, entry, entries);
-   }
-
-   /* TODO: check if already subscribed */
 
    TAILQ_INSERT_TAIL(&entry->subscribers, client, entries);
 
@@ -264,107 +258,42 @@ int stomp_send(struct client *client)
       return 1;
    }
 
-   TAILQ_FOREACH(queue, &queues, entries) {
-      if(strcmp(queue->queuename, queuename) == 0)
-         break;
-   }
-
-   if(queue != NULL){
-      /* Send it out to the subscribers */
-      TAILQ_FOREACH(subscriber, &queue->subscribers, entries){
-         subscriber->response_cmd = STOMP_CMD_MESSAGE;
-         subscriber->response_headers = client->request_headers;
-         subscriber->response = client->request_body;
-
-         stomp_handle_response(subscriber);
-
-         subscriber->response_cmd = STOMP_CMD_NONE;
-         subscriber->response_headers = NULL;
-         subscriber->response = NULL;
+   queue = stomp_find_queue(queuename);
+   if (queue == NULL){
+      queue = stomp_add_queue(queuename);
+      if(queue == NULL){
+         client->response_cmd = STOMP_CMD_ERROR;
+         evhttp_add_header(client->response_headers, "message", "Creating destination failed");
+         return 1;
       }
    }
-   else if(strncmp(queuename, "/topic/", 7) != 0){
-      /* TODO: Store message in LevelDB */
 
-      loginfo("No active subscribers on that queue");
+#ifdef WITH_LEVELDB
+   if(strncmp(queuename, "/topic/", 7) != 0){
+      if(leveldb_add_message(queue, client->request) != 0){
+         client->response_cmd = STOMP_CMD_ERROR;
+         evhttp_add_header(client->response_headers, "message", "Storing message failed");
+         return 1;
+      }
+   }
+#endif
+
+   /* Send it out to the subscribers */
+   TAILQ_FOREACH(subscriber, &queue->subscribers, entries){
+      subscriber->response_cmd = STOMP_CMD_MESSAGE;
+      subscriber->response_headers = client->request_headers;
+      subscriber->response = client->request_body;
+
+      stomp_handle_response(subscriber);
+
+      subscriber->response_cmd = STOMP_CMD_NONE;
+      subscriber->response_headers = NULL;
+      subscriber->response = NULL;
    }
 
    client->response_cmd = STOMP_CMD_NONE;
    client->response = NULL;
 
    return 0;
-}
-
-
-int stomp_parse_headers(struct evkeyvalq *headers, char *request)
-{
-   char *line;
-   size_t line_length;
-   char *skey, *svalue;
-   struct evbuffer *buffer;
-
-   buffer = evbuffer_new();
-
-   evbuffer_add(buffer, request, strlen(request));
-
-   while ((line = evbuffer_readln(buffer, &line_length, EVBUFFER_EOL_CRLF)) != NULL) {
-      skey = NULL;
-      svalue = NULL;
-
-      if(strchr(line, ':') == NULL){
-         continue;
-      }
-
-      /* Processing of header lines */
-      svalue = line;
-      skey = strsep(&svalue, ":");
-      if (svalue == NULL){
-         free(line);
-         evbuffer_free(buffer);
-         return 2;
-      }
-
-      svalue += strspn(svalue, " ");
-
-      /* TODO: check if header with same name already parsed */
-
-      if (evhttp_add_header(headers, skey, svalue) == -1){
-         free(line);
-         evbuffer_free(buffer);
-         return 1;
-      }
-
-      free(line);
-   }
-
-   evbuffer_free(buffer);
-
-   return 0;
-}
-
-
-void stomp_free_client(struct client *client)
-{
-   /* TODO: remove all subscriptions */
-   /* TODO: free all allocated memory */
-
-   struct client *entry, *tmp_entry;
-
-   for (entry = TAILQ_FIRST(&clients); entry != NULL; entry = tmp_entry) {
-      tmp_entry = TAILQ_NEXT(entry, entries);
-      if ((void *)tmp_entry != NULL && client->fd == tmp_entry->fd) {
-         TAILQ_REMOVE(&clients, entry, entries);
-         free(entry);
-      }
-   }
-
-   client->authenticated = 0;
-   logwarn("Free client %d", client->fd);
-
-   if(client->response_cmd == STOMP_CMD_DISCONNECT){
-      bufferevent_free(client->bev);
-      close(client->fd);
-      free(client);
-   }
 }
 

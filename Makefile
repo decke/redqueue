@@ -20,7 +20,7 @@ SRC+=	leveldb.c
 CFLAGS+=-I${LOCALBASE}/include
 LDFLAGS+=-L${LOCALBASE}/lib/event2 -L${LOCALBASE}/lib
 
-SRC+=	log.c util.c server.c common.c stomp.c
+SRC+=	log.c util.c server.c common.c stomp.c stomputil.c
 OBJS=	${SRC:.c=.o}
 
 all:	redqd

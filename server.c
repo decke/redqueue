@@ -56,6 +56,7 @@
 #include "server.h"
 #include "client.h"
 #include "stomp.h"
+#include "stomputil.h"
 #include "leveldb.h"
 
 struct event_base *base;
