@@ -203,11 +203,8 @@ void buffered_on_error(struct bufferevent *bev, short what, void *arg)
 		logwarn("Client %d socket error, disconnecting.", client->fd);
 	}
 
+	client->response_cmd = STOMP_CMD_DISCONNECT;
 	stomp_free_client(client);
-
-	bufferevent_free(client->bev);
-	close(client->fd);
-	free(client);
 }
 
 /**

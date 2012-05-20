@@ -84,29 +84,25 @@ struct queue* stomp_find_queue(const char *queuename)
 
 void stomp_free_queue(struct queue *queue)
 {
-   /* TODO: implement stomp_free_queue */
-   ;
+   /* TODO: Remove subscriptions */
+
+   TAILQ_REMOVE(&queues, queue, entries);
+   free(queue);
 }
 
 void stomp_free_client(struct client *client)
 {        
-   /* TODO: remove all subscriptions */
-   /* TODO: free all allocated memory */
-
-   struct client *entry, *tmp_entry;
-         
-   for (entry = TAILQ_FIRST(&clients); entry != NULL; entry = tmp_entry) {
-      tmp_entry = TAILQ_NEXT(entry, entries);
-      if ((void *)tmp_entry != NULL && client->fd == tmp_entry->fd) {
-         TAILQ_REMOVE(&clients, entry, entries);
-         free(entry);
-      }
-   }
+   /* Error/Logout */
+   logwarn("Logout Client %d", client->fd);
 
    client->authenticated = 0;
-   logwarn("Free client %d", client->fd);
-
+   /* TODO: remove all subscriptions */
+         
+   /* Disconnect/Free */
    if(client->response_cmd == STOMP_CMD_DISCONNECT){
+      /* TODO: free all allocated memory */
+      TAILQ_REMOVE(&clients, client, entries);
+
       bufferevent_free(client->bev);
       close(client->fd);
       free(client);
